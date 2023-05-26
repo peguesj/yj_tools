@@ -1,7 +1,3 @@
-Certainly! Here's a basic README.md file for your script:
-
----
-```markdown
 # Vocal Remover Script
 
 This is a Python script for removing vocals from an audio file. It uses the Hybrid Demucs or Spleeter library, depending on the command-line arguments.
