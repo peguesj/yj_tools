@@ -1,6 +1,6 @@
 #!/bin/zsh
 # -----------------------------------------------------------------------------
-# BTAU (Back That App Up) - v1.1.0 (2025-02-28)
+# BTAU (Back That App Up) - v1.2.0 (2025-02-28)
 #
 # Authors:
 #   - Jeremiah Pegues <jeremiah@pegues.io> - https://pegues.io
@@ -12,24 +12,25 @@
 #   directories (e.g. node_modules, venv, vendor, deps, etc.), and OS system files.
 #
 #   Supports optional encryption (AES-256-CBC via OpenSSL), adjustable compression,
-#   multiple archive formats (targz, gz, zip, 7zip), splitting options, and verbose logging.
+#   multiple archive formats (targz, gz, zip, 7zip), splitting options, verbose logging,
+#   interactive prompting, and a dry-run mode.
 #
-#   Command-line options:
-#
-#     --no-env     : Include .env files rather than excluding them (default: exclude)
-#     --zip-by     : Specify splitting mode:
-#                     split [N] or split --max SIZE or sub LEVEL
+#   Command-line options include:
+#     --no-env     : Exclude .env files (default; include if not specified)
+#     --zip-by     : Splitting mode: split [N] or split --max SIZE or sub LEVEL
 #     --no-pass    : Do not use encryption (skip password prompt)
 #     --comp       : Compression level (none, min, normal, maximum)
 #     --format     : Archive format (targz, gz, zip, 7zip)
 #     --log-level  : Log verbosity (INFO, WARN, ERROR; default: WARN) and sets YJ_CONFIG_LOGLEVEL
-#     --prompt     : Interactive prompting of parameters
+#     --name       : Archive name parameter (<default|custom<string>|dir>).
+#                  If omitted, defaults to "btau_archive_<TIMESTAMP>.<ext>"
+#     --prompt     : Interactive prompting for parameters
 #     --no-warn    : Suppress warnings
-#     --dry-run    : Perform a dry run without executing commands
+#     --dry-run    : Show commands without executing them
 #
 # Usage Examples:
 #   ./BTAU.sh --zip-by split 3
-#   ./BTAU.sh --no-env --zip-by split --max 2GB --comp maximum --format 7zip --log-level INFO
+#   ./BTAU.sh --no-env --zip-by split --max 2GB --comp maximum --format 7zip --log-level INFO --name customMyBackup
 #   ./BTAU.sh --zip-by sub 1 --prompt --dry-run
 #
 # -----------------------------------------------------------------------------
@@ -37,7 +38,7 @@
 # Splash screen
 splash() {
   echo "=========================================="
-  echo " BTAU (Back That App Up) v1.1.0 (2025-02-28)"
+  echo " BTAU (Back That App Up) v1.2.0 (2025-02-28)"
   echo " Developed by:"
   echo "  - Jeremiah Pegues (jeremiah@pegues.io) - https://pegues.io"
   echo "  - OPSGAÃNG Sistemi (word@iite.bet) - https://iite.bet/ardela/schemas"
@@ -64,6 +65,8 @@ LOG_LEVEL="WARN"
 PROMPT=false
 NO_WARN=false
 DRY_RUN=false
+# New parameter for archive naming; default value is empty meaning default behavior.
+ARCHIVE_NAME_PARAM="default"
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -140,6 +143,11 @@ while [[ $# -gt 0 ]]; do
                     ;;
             esac
             ;;
+        --name)
+            shift
+            ARCHIVE_NAME_PARAM="$1"
+            shift
+            ;;
         --prompt)
             PROMPT=true
             shift
@@ -192,13 +200,17 @@ if [ "$PROMPT" = true ]; then
         LOG_LEVEL="$lvl"
         export YJ_CONFIG_LOGLEVEL="$LOG_LEVEL"
     fi
+
+    read "name?Archive name parameter (default, dir, or custom<string>) [default default]: "
+    if [ -n "$name" ]; then
+        ARCHIVE_NAME_PARAM="$name"
+    fi
 fi
 
 # Setup logging function (syslog style)
 log_msg() {
     local level="$1"
     local msg="$2"
-    # Define levels: INFO (1), WARN (2), ERROR (3)
     typeset -A LEVELS
     LEVELS=( INFO 1 WARN 2 ERROR 3 )
     if [ "${LEVELS[$level]}" -lt "${LEVELS[$LOG_LEVEL]}" ]; then
@@ -222,7 +234,7 @@ run_cmd() {
     fi
 }
 
-log_msg "INFO" "Starting BTAU with parameters: NO_ENV=$NO_ENV, ZIP_BY_MODE=$ZIP_BY_MODE, NO_PASS=$NO_PASS, COMP_LEVEL=$COMP_LEVEL, FORMAT=$FORMAT, LOG_LEVEL=$LOG_LEVEL, PROMPT=$PROMPT, NO_WARN=$NO_WARN, DRY_RUN=$DRY_RUN"
+log_msg "INFO" "Starting BTAU with parameters: NO_ENV=$NO_ENV, ZIP_BY_MODE=$ZIP_BY_MODE, NO_PASS=$NO_PASS, COMP_LEVEL=$COMP_LEVEL, FORMAT=$FORMAT, ARCHIVE_NAME_PARAM=$ARCHIVE_NAME_PARAM, LOG_LEVEL=$LOG_LEVEL, PROMPT=$PROMPT, NO_WARN=$NO_WARN, DRY_RUN=$DRY_RUN"
 
 # Build exclusion patterns
 EXCLUDES=()
@@ -309,15 +321,29 @@ else
     STAT_CMD="stat -c%s"
 fi
 
+# Generate archive prefix based on --name parameter
+if [[ "$ARCHIVE_NAME_PARAM" == "default" ]]; then
+    ARCHIVE_PREFIX="btau_archive_"
+elif [[ "$ARCHIVE_NAME_PARAM" == "dir" ]]; then
+    ARCHIVE_PREFIX="$(basename "$PWD")_"
+elif [[ "$ARCHIVE_NAME_PARAM" == custom* ]]; then
+    # Remove the 'custom' prefix if provided (e.g. customMyBackup -> MyBackup)
+    ARCHIVE_PREFIX="${ARCHIVE_NAME_PARAM#custom}_"
+else
+    ARCHIVE_PREFIX="${ARCHIVE_NAME_PARAM}_"
+fi
+
 # Generate archive name with timestamp
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
-ARCHIVE_BASE="archive_$TIMESTAMP"
+ARCHIVE_BASE="${ARCHIVE_PREFIX}${TIMESTAMP}"
 ARCHIVE_NAME=""
 case "$FORMAT" in
     targz|gz) ARCHIVE_NAME="${ARCHIVE_BASE}.tar.gz" ;;
     zip) ARCHIVE_NAME="${ARCHIVE_BASE}.zip" ;;
     7zip) ARCHIVE_NAME="${ARCHIVE_BASE}.7z" ;;
 esac
+
+log_msg "INFO" "Archive will be named: $ARCHIVE_NAME"
 
 # Function to create the archive
 create_archive() {
@@ -374,11 +400,11 @@ elif [[ "$ZIP_BY_MODE" == "sub" ]]; then
     log_msg "INFO" "Creating separate archives for each subdirectory at level $SUB_LEVEL"
     while IFS= read -r subdir; do
         archive_label=$(echo "$subdir" | sed 's#^\./##; s#/#_#g')
-        SUB_ARCHIVE="${archive_label}_$TIMESTAMP"
+        SUB_ARCHIVE_BASE="${archive_label}_$TIMESTAMP"
         case "$FORMAT" in
-            targz|gz) SUB_ARCHIVE="${SUB_ARCHIVE}.tar.gz" ;;
-            zip) SUB_ARCHIVE="${SUB_ARCHIVE}.zip" ;;
-            7zip) SUB_ARCHIVE="${SUB_ARCHIVE}.7z" ;;
+            targz|gz) SUB_ARCHIVE="${SUB_ARCHIVE_BASE}.tar.gz" ;;
+            zip) SUB_ARCHIVE="${SUB_ARCHIVE_BASE}.zip" ;;
+            7zip) SUB_ARCHIVE="${SUB_ARCHIVE_BASE}.7z" ;;
         esac
         TEMP_FILELIST=$(mktemp)
         find "$subdir" -type f $(for pattern in "${EXCLUDES[@]}"; do echo -n " -not -path \"$subdir/$pattern\""; done) > "$TEMP_FILELIST"
