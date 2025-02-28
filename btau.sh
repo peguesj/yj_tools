@@ -1,30 +1,31 @@
-#!/bin/bash
+#!/bin/zsh
 # -----------------------------------------------------------------------------
-# BTAU (Back That App Up) - v1.0.0 (2025-02-28)
+# BTAU (Back That App Up) - v1.1.0 (2025-02-28)
 #
 # Authors:
 #   - Jeremiah Pegues <jeremiah@pegues.io> - https://pegues.io
 #   - OPSGAÃNG Sistemi <word@iite.bet> - https://iite.bet/ardela/schemas
 #
 # Description:
-#   This script archives directories recursively while excluding files and
-#   directories based on .gitignore, hidden dirs, system cache files, and
-#   library/package dirs such as node_modules, venv, etc.
+#   Archives directories recursively while excluding files and directories
+#   based on .gitignore, hidden dirs, system cache files, language-specific
+#   directories (e.g. node_modules, venv, vendor, deps, etc.), and OS system files.
 #
-#   It supports optional encryption (AES-256-CBC via OpenSSL), compression,
-#   and splitting of the archive. Use the provided parameters to customize
-#   behavior:
+#   Supports optional encryption (AES-256-CBC via OpenSSL), adjustable compression,
+#   multiple archive formats (targz, gz, zip, 7zip), splitting options, and verbose logging.
 #
-#     --no-env     : Include .env files (default: .env files are excluded)
+#   Command-line options:
+#
+#     --no-env     : Include .env files rather than excluding them (default: exclude)
 #     --zip-by     : Specify splitting mode:
-#                      split [N] or split --max SIZE or sub LEVEL
-#     --no-pass    : Do not use encryption (no password prompt)
+#                     split [N] or split --max SIZE or sub LEVEL
+#     --no-pass    : Do not use encryption (skip password prompt)
 #     --comp       : Compression level (none, min, normal, maximum)
 #     --format     : Archive format (targz, gz, zip, 7zip)
-#     --log-level  : Log verbosity (INFO, WARN, ERROR; default: WARN)
+#     --log-level  : Log verbosity (INFO, WARN, ERROR; default: WARN) and sets YJ_CONFIG_LOGLEVEL
 #     --prompt     : Interactive prompting of parameters
 #     --no-warn    : Suppress warnings
-#     --dry-run    : Show commands without executing them
+#     --dry-run    : Perform a dry run without executing commands
 #
 # Usage Examples:
 #   ./BTAU.sh --zip-by split 3
@@ -36,7 +37,7 @@
 # Splash screen
 splash() {
   echo "=========================================="
-  echo " BTAU (Back That App Up) v1.0.0 (2025-02-28)"
+  echo " BTAU (Back That App Up) v1.1.0 (2025-02-28)"
   echo " Developed by:"
   echo "  - Jeremiah Pegues (jeremiah@pegues.io) - https://pegues.io"
   echo "  - OPSGAÃNG Sistemi (word@iite.bet) - https://iite.bet/ardela/schemas"
@@ -44,7 +45,11 @@ splash() {
 }
 splash
 
+# Set strict error handling
 set -euo pipefail
+
+# Trap errors and print a message before exiting
+trap 'echo "[ERROR] An unexpected error occurred on line ${LINENO}. Exiting."; exit 1' ERR
 
 # Default parameters:
 NO_ENV=false
@@ -103,7 +108,7 @@ while [[ $# -gt 0 ]]; do
                     shift
                     ;;
                 *)
-                    echo "Invalid compression level. Choose one of: none, min, normal, maximum."
+                    echo "Invalid compression level. Choose: none, min, normal, maximum."
                     exit 1
                     ;;
             esac
@@ -116,7 +121,7 @@ while [[ $# -gt 0 ]]; do
                     shift
                     ;;
                 *)
-                    echo "Invalid format. Choose one of: targz, gz, zip, 7zip."
+                    echo "Invalid format. Choose: targz, gz, zip, 7zip."
                     exit 1
                     ;;
             esac
@@ -130,7 +135,7 @@ while [[ $# -gt 0 ]]; do
                     shift
                     ;;
                 *)
-                    echo "Invalid log level. Choose one of: INFO, WARN, ERROR."
+                    echo "Invalid log level. Choose: INFO, WARN, ERROR."
                     exit 1
                     ;;
             esac
@@ -156,31 +161,33 @@ done
 
 # Interactive prompting if --prompt is set
 if [ "$PROMPT" = true ]; then
-    read -p "Exclude .env files? (y/n, default y): " answer
+    read -q "answer?Exclude .env files? (y/n, default y): "
+    echo
     if [[ "$answer" =~ ^[Nn] ]]; then
         NO_ENV=false
     else
         NO_ENV=true
     fi
 
-    read -p "Archive format (targz, gz, zip, 7zip) [default targz]: " fmt
+    read "fmt?Archive format (targz, gz, zip, 7zip) [default targz]: "
     if [ -n "$fmt" ]; then
         FORMAT="$fmt"
     fi
 
-    read -p "Compression level (none, min, normal, maximum) [default normal]: " comp
+    read "comp?Compression level (none, min, normal, maximum) [default normal]: "
     if [ -n "$comp" ]; then
         COMP_LEVEL="$comp"
     fi
 
-    read -p "Use encryption? (y/n, default y): " enc
+    read -q "enc?Use encryption? (y/n, default y): "
+    echo
     if [[ "$enc" =~ ^[Nn] ]]; then
         NO_PASS=true
     else
         NO_PASS=false
     fi
 
-    read -p "Log level (INFO, WARN, ERROR) [default WARN]: " lvl
+    read "lvl?Log level (INFO, WARN, ERROR) [default WARN]: "
     if [ -n "$lvl" ]; then
         LOG_LEVEL="$lvl"
         export YJ_CONFIG_LOGLEVEL="$LOG_LEVEL"
@@ -191,8 +198,9 @@ fi
 log_msg() {
     local level="$1"
     local msg="$2"
-    # Levels: INFO(1), WARN(2), ERROR(3) - only log if current level permits.
-    declare -A LEVELS=( ["INFO"]=1 ["WARN"]=2 ["ERROR"]=3 )
+    # Define levels: INFO (1), WARN (2), ERROR (3)
+    typeset -A LEVELS
+    LEVELS=( INFO 1 WARN 2 ERROR 3 )
     if [ "${LEVELS[$level]}" -lt "${LEVELS[$LOG_LEVEL]}" ]; then
         return
     fi
@@ -204,7 +212,7 @@ if [ "$NO_WARN" = true ]; then
     exec 2>/dev/null
 fi
 
-# Function to run commands; in dry-run, just echo them.
+# Function to run commands; in dry-run mode, just echo them.
 run_cmd() {
     if [ "$DRY_RUN" = true ]; then
         log_msg "INFO" "DRY-RUN: $*"
@@ -216,7 +224,7 @@ run_cmd() {
 
 log_msg "INFO" "Starting BTAU with parameters: NO_ENV=$NO_ENV, ZIP_BY_MODE=$ZIP_BY_MODE, NO_PASS=$NO_PASS, COMP_LEVEL=$COMP_LEVEL, FORMAT=$FORMAT, LOG_LEVEL=$LOG_LEVEL, PROMPT=$PROMPT, NO_WARN=$NO_WARN, DRY_RUN=$DRY_RUN"
 
-# Build exclude patterns
+# Build exclusion patterns
 EXCLUDES=()
 if [ "$NO_ENV" = false ]; then
     EXCLUDES+=("--exclude=.env")
@@ -253,11 +261,11 @@ EXCLUDES+=("--exclude=bin")
 EXCLUDES+=("--exclude=target")
 EXCLUDES+=("--exclude=build")
 EXCLUDES+=("--exclude=out")
-# macOS
+# macOS system files
 EXCLUDES+=("--exclude=.DS_Store")
 EXCLUDES+=("--exclude=.AppleDouble")
 EXCLUDES+=("--exclude=.LSOverride")
-# Windows
+# Windows system files
 EXCLUDES+=("--exclude=Thumbs.db")
 EXCLUDES+=("--exclude=desktop.ini")
 
@@ -272,26 +280,34 @@ log_msg "INFO" "File list created using command: $FIND_CMD"
 
 # If encryption is enabled, prompt for password
 if [ "$NO_PASS" = false ]; then
-    read -s -p "Enter encryption password: " PASSWORD
+    read -s "PASSWORD?Enter encryption password: "
     echo
-    read -s -p "Confirm encryption password: " PASSWORD_CONFIRM
+    read -s "PASSWORD_CONFIRM?Confirm encryption password: "
     echo
     if [ "$PASSWORD" != "$PASSWORD_CONFIRM" ]; then
         log_msg "ERROR" "Passwords do not match!"
         exit 1
     fi
 else
-    log_msg "WARN" "No encryption will be used (--no-pass enabled)"
+    log_msg "WARN" "Encryption disabled (--no-pass enabled)"
 fi
 
-# Map compression level to gzip/zip/7zip options
+# Map compression level to options for gzip/zip/7zip
 case "$COMP_LEVEL" in
     none) GZIP_OPT="-0" ;;
     min) GZIP_OPT="-1" ;;
     normal) GZIP_OPT="-6" ;;
     maximum) GZIP_OPT="-9" ;;
 esac
-log_msg "INFO" "Compression level set to $COMP_LEVEL ($GZIP_OPT)"
+log_msg "INFO" "Compression level: $COMP_LEVEL ($GZIP_OPT)"
+
+# Determine OS for file size commands (macOS vs Linux)
+OS_TYPE=$(uname)
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    STAT_CMD="stat -f%z"
+else
+    STAT_CMD="stat -c%s"
+fi
 
 # Generate archive name with timestamp
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
@@ -305,14 +321,14 @@ esac
 
 # Function to create the archive
 create_archive() {
-    if [ "$FORMAT" = "targz" ] || [ "$FORMAT" = "gz" ]; then
+    if [[ "$FORMAT" == "targz" || "$FORMAT" == "gz" ]]; then
         TAR_CMD="tar -czf - ${EXCLUDES[@]} -T \"$FILELIST\""
         if [ "$NO_PASS" = false ]; then
             CMD="$TAR_CMD | openssl enc -aes-256-cbc -salt -pass pass:\"$PASSWORD\" -out \"$ARCHIVE_NAME\""
         else
             CMD="$TAR_CMD > \"$ARCHIVE_NAME\""
         fi
-    elif [ "$FORMAT" = "zip" ]; then
+    elif [[ "$FORMAT" == "zip" ]]; then
         case "$COMP_LEVEL" in
             none) ZIP_LEVEL="-0" ;;
             min) ZIP_LEVEL="-1" ;;
@@ -324,7 +340,7 @@ create_archive() {
         else
             CMD="zip -r $ZIP_LEVEL \"$ARCHIVE_NAME\" ."
         fi
-    elif [ "$FORMAT" = "7zip" ]; then
+    elif [[ "$FORMAT" == "7zip" ]]; then
         case "$COMP_LEVEL" in
             none) SEVEN_LEVEL="-mx=0" ;;
             min) SEVEN_LEVEL="-mx=1" ;;
@@ -344,17 +360,17 @@ create_archive() {
 create_archive
 
 # Handle splitting if --zip-by was specified
-if [ "$ZIP_BY_MODE" = "split" ]; then
+if [[ "$ZIP_BY_MODE" == "split" ]]; then
     if [ -n "$SPLIT_MAX" ]; then
         log_msg "INFO" "Splitting archive into chunks with maximum size: $SPLIT_MAX"
         run_cmd "split -b \"$SPLIT_MAX\" \"$ARCHIVE_NAME\" \"${ARCHIVE_NAME}_part_\""
     elif [ "$SPLIT_COUNT" -gt 0 ]; then
-        FILESIZE=$(stat -c%s "$ARCHIVE_NAME")
+        FILESIZE=$(eval $STAT_CMD "\"$ARCHIVE_NAME\"")
         PART_SIZE=$(( (FILESIZE + SPLIT_COUNT - 1) / SPLIT_COUNT ))
         log_msg "INFO" "Splitting archive into $SPLIT_COUNT parts (each approx. $PART_SIZE bytes)"
         run_cmd "split -b \"$PART_SIZE\" \"$ARCHIVE_NAME\" \"${ARCHIVE_NAME}_part_\""
     fi
-elif [ "$ZIP_BY_MODE" = "sub" ]; then
+elif [[ "$ZIP_BY_MODE" == "sub" ]]; then
     log_msg "INFO" "Creating separate archives for each subdirectory at level $SUB_LEVEL"
     while IFS= read -r subdir; do
         archive_label=$(echo "$subdir" | sed 's#^\./##; s#/#_#g')
@@ -366,14 +382,14 @@ elif [ "$ZIP_BY_MODE" = "sub" ]; then
         esac
         TEMP_FILELIST=$(mktemp)
         find "$subdir" -type f $(for pattern in "${EXCLUDES[@]}"; do echo -n " -not -path \"$subdir/$pattern\""; done) > "$TEMP_FILELIST"
-        if [ "$FORMAT" = "targz" ] || [ "$FORMAT" = "gz" ]; then
+        if [[ "$FORMAT" == "targz" || "$FORMAT" == "gz" ]]; then
             TAR_CMD="tar -czf - ${EXCLUDES[@]} -T \"$TEMP_FILELIST\""
             if [ "$NO_PASS" = false ]; then
                 SUB_CMD="$TAR_CMD | openssl enc -aes-256-cbc -salt -pass pass:\"$PASSWORD\" -out \"$SUB_ARCHIVE\""
             else
                 SUB_CMD="$TAR_CMD > \"$SUB_ARCHIVE\""
             fi
-        elif [ "$FORMAT" = "zip" ]; then
+        elif [[ "$FORMAT" == "zip" ]]; then
             case "$COMP_LEVEL" in
                 none) ZIP_LEVEL="-0" ;;
                 min) ZIP_LEVEL="-1" ;;
@@ -385,7 +401,7 @@ elif [ "$ZIP_BY_MODE" = "sub" ]; then
             else
                 SUB_CMD="zip -r $ZIP_LEVEL \"$SUB_ARCHIVE\" ."
             fi
-        elif [ "$FORMAT" = "7zip" ]; then
+        elif [[ "$FORMAT" == "7zip" ]]; then
             case "$COMP_LEVEL" in
                 none) SEVEN_LEVEL="-mx=0" ;;
                 min) SEVEN_LEVEL="-mx=1" ;;
@@ -406,9 +422,9 @@ elif [ "$ZIP_BY_MODE" = "sub" ]; then
 fi
 
 log_msg "INFO" "Archive created: $ARCHIVE_NAME"
-if [ "$ZIP_BY_MODE" = "split" ]; then
+if [[ "$ZIP_BY_MODE" == "split" ]]; then
     log_msg "INFO" "Archive split into parts with prefix: ${ARCHIVE_NAME}_part_"
 fi
-if [ "$ZIP_BY_MODE" = "sub" ]; then
+if [[ "$ZIP_BY_MODE" == "sub" ]]; then
     log_msg "INFO" "Archives created for each subdirectory at level $SUB_LEVEL"
 fi
