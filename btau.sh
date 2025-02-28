@@ -1,6 +1,6 @@
 #!/bin/zsh
 # -----------------------------------------------------------------------------
-# BTAU (Back That App Up) - v1.2.0 (2025-02-28)
+# BTAU (Back That App Up) - v1.3.1 (2025-02-28)
 #
 # Authors:
 #   - Jeremiah Pegues <jeremiah@pegues.io> - https://pegues.io
@@ -11,9 +11,9 @@
 #   based on .gitignore, hidden dirs, system cache files, language-specific
 #   directories (e.g. node_modules, venv, vendor, deps, etc.), and OS system files.
 #
-#   Supports optional encryption (AES-256-CBC via OpenSSL), adjustable compression,
+#   Supports optional encryption (AES-256-CBC via OpenSSL with PBKDF2), adjustable compression,
 #   multiple archive formats (targz, gz, zip, 7zip), splitting options, verbose logging,
-#   interactive prompting, and a dry-run mode.
+#   interactive prompting, dry-run mode, and output directory specification.
 #
 #   Command-line options include:
 #     --no-env     : Exclude .env files (default; include if not specified)
@@ -23,14 +23,15 @@
 #     --format     : Archive format (targz, gz, zip, 7zip)
 #     --log-level  : Log verbosity (INFO, WARN, ERROR; default: WARN) and sets YJ_CONFIG_LOGLEVEL
 #     --name       : Archive name parameter (<default|custom<string>|dir>).
-#                  If omitted, defaults to "btau_archive_<TIMESTAMP>.<ext>"
+#                  If omitted, defaults to "btau_archive_<TIMESTAMP>.<ext>".
+#     --output-dir : Directory to place the generated archive(s) (default: current directory)
 #     --prompt     : Interactive prompting for parameters
 #     --no-warn    : Suppress warnings
 #     --dry-run    : Show commands without executing them
 #
 # Usage Examples:
 #   ./BTAU.sh --zip-by split 3
-#   ./BTAU.sh --no-env --zip-by split --max 2GB --comp maximum --format 7zip --log-level INFO --name customMyBackup
+#   ./BTAU.sh --no-env --zip-by split --max 2GB --comp maximum --format 7zip --log-level INFO --name customMyBackup --output-dir /path/to/backup
 #   ./BTAU.sh --zip-by sub 1 --prompt --dry-run
 #
 # -----------------------------------------------------------------------------
@@ -38,7 +39,7 @@
 # Splash screen
 splash() {
   echo "=========================================="
-  echo " BTAU (Back That App Up) v1.2.0 (2025-02-28)"
+  echo " BTAU (Back That App Up) v1.3.1 (2025-02-28)"
   echo " Developed by:"
   echo "  - Jeremiah Pegues (jeremiah@pegues.io) - https://pegues.io"
   echo "  - OPSGAÃNG Sistemi (word@iite.bet) - https://iite.bet/ardela/schemas"
@@ -65,8 +66,8 @@ LOG_LEVEL="WARN"
 PROMPT=false
 NO_WARN=false
 DRY_RUN=false
-# New parameter for archive naming; default value is empty meaning default behavior.
 ARCHIVE_NAME_PARAM="default"
+OUTPUT_DIR="."  # default output directory is current directory
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -148,6 +149,11 @@ while [[ $# -gt 0 ]]; do
             ARCHIVE_NAME_PARAM="$1"
             shift
             ;;
+        --output-dir)
+            shift
+            OUTPUT_DIR="$1"
+            shift
+            ;;
         --prompt)
             PROMPT=true
             shift
@@ -166,6 +172,12 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Ensure the output directory exists
+if [[ ! -d "$OUTPUT_DIR" ]]; then
+    echo "[INFO] Creating output directory: $OUTPUT_DIR"
+    mkdir -p "$OUTPUT_DIR"
+fi
 
 # Interactive prompting if --prompt is set
 if [ "$PROMPT" = true ]; then
@@ -205,6 +217,14 @@ if [ "$PROMPT" = true ]; then
     if [ -n "$name" ]; then
         ARCHIVE_NAME_PARAM="$name"
     fi
+
+    read "out?Output directory [default current directory]: "
+    if [ -n "$out" ]; then
+        OUTPUT_DIR="$out"
+        if [[ ! -d "$OUTPUT_DIR" ]]; then
+            mkdir -p "$OUTPUT_DIR"
+        fi
+    fi
 fi
 
 # Setup logging function (syslog style)
@@ -234,7 +254,7 @@ run_cmd() {
     fi
 }
 
-log_msg "INFO" "Starting BTAU with parameters: NO_ENV=$NO_ENV, ZIP_BY_MODE=$ZIP_BY_MODE, NO_PASS=$NO_PASS, COMP_LEVEL=$COMP_LEVEL, FORMAT=$FORMAT, ARCHIVE_NAME_PARAM=$ARCHIVE_NAME_PARAM, LOG_LEVEL=$LOG_LEVEL, PROMPT=$PROMPT, NO_WARN=$NO_WARN, DRY_RUN=$DRY_RUN"
+log_msg "INFO" "Starting BTAU with parameters: NO_ENV=$NO_ENV, ZIP_BY_MODE=$ZIP_BY_MODE, NO_PASS=$NO_PASS, COMP_LEVEL=$COMP_LEVEL, FORMAT=$FORMAT, ARCHIVE_NAME_PARAM=$ARCHIVE_NAME_PARAM, OUTPUT_DIR=$OUTPUT_DIR, LOG_LEVEL=$LOG_LEVEL, PROMPT=$PROMPT, NO_WARN=$NO_WARN, DRY_RUN=$DRY_RUN"
 
 # Build exclusion patterns
 EXCLUDES=()
@@ -327,20 +347,19 @@ if [[ "$ARCHIVE_NAME_PARAM" == "default" ]]; then
 elif [[ "$ARCHIVE_NAME_PARAM" == "dir" ]]; then
     ARCHIVE_PREFIX="$(basename "$PWD")_"
 elif [[ "$ARCHIVE_NAME_PARAM" == custom* ]]; then
-    # Remove the 'custom' prefix if provided (e.g. customMyBackup -> MyBackup)
     ARCHIVE_PREFIX="${ARCHIVE_NAME_PARAM#custom}_"
 else
     ARCHIVE_PREFIX="${ARCHIVE_NAME_PARAM}_"
 fi
 
-# Generate archive name with timestamp
+# Generate archive name with timestamp and output directory prefix
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
 ARCHIVE_BASE="${ARCHIVE_PREFIX}${TIMESTAMP}"
 ARCHIVE_NAME=""
 case "$FORMAT" in
-    targz|gz) ARCHIVE_NAME="${ARCHIVE_BASE}.tar.gz" ;;
-    zip) ARCHIVE_NAME="${ARCHIVE_BASE}.zip" ;;
-    7zip) ARCHIVE_NAME="${ARCHIVE_BASE}.7z" ;;
+    targz|gz) ARCHIVE_NAME="${OUTPUT_DIR}/${ARCHIVE_BASE}.tar.gz" ;;
+    zip) ARCHIVE_NAME="${OUTPUT_DIR}/${ARCHIVE_BASE}.zip" ;;
+    7zip) ARCHIVE_NAME="${OUTPUT_DIR}/${ARCHIVE_BASE}.7z" ;;
 esac
 
 log_msg "INFO" "Archive will be named: $ARCHIVE_NAME"
@@ -350,7 +369,7 @@ create_archive() {
     if [[ "$FORMAT" == "targz" || "$FORMAT" == "gz" ]]; then
         TAR_CMD="tar -czf - ${EXCLUDES[@]} -T \"$FILELIST\""
         if [ "$NO_PASS" = false ]; then
-            CMD="$TAR_CMD | openssl enc -aes-256-cbc -salt -pass pass:\"$PASSWORD\" -out \"$ARCHIVE_NAME\""
+            CMD="$TAR_CMD | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:\"$PASSWORD\" -out \"$ARCHIVE_NAME\""
         else
             CMD="$TAR_CMD > \"$ARCHIVE_NAME\""
         fi
@@ -402,16 +421,16 @@ elif [[ "$ZIP_BY_MODE" == "sub" ]]; then
         archive_label=$(echo "$subdir" | sed 's#^\./##; s#/#_#g')
         SUB_ARCHIVE_BASE="${archive_label}_$TIMESTAMP"
         case "$FORMAT" in
-            targz|gz) SUB_ARCHIVE="${SUB_ARCHIVE_BASE}.tar.gz" ;;
-            zip) SUB_ARCHIVE="${SUB_ARCHIVE_BASE}.zip" ;;
-            7zip) SUB_ARCHIVE="${SUB_ARCHIVE_BASE}.7z" ;;
+            targz|gz) SUB_ARCHIVE="${OUTPUT_DIR}/${SUB_ARCHIVE_BASE}.tar.gz" ;;
+            zip) SUB_ARCHIVE="${OUTPUT_DIR}/${SUB_ARCHIVE_BASE}.zip" ;;
+            7zip) SUB_ARCHIVE="${OUTPUT_DIR}/${SUB_ARCHIVE_BASE}.7z" ;;
         esac
         TEMP_FILELIST=$(mktemp)
         find "$subdir" -type f $(for pattern in "${EXCLUDES[@]}"; do echo -n " -not -path \"$subdir/$pattern\""; done) > "$TEMP_FILELIST"
         if [[ "$FORMAT" == "targz" || "$FORMAT" == "gz" ]]; then
             TAR_CMD="tar -czf - ${EXCLUDES[@]} -T \"$TEMP_FILELIST\""
             if [ "$NO_PASS" = false ]; then
-                SUB_CMD="$TAR_CMD | openssl enc -aes-256-cbc -salt -pass pass:\"$PASSWORD\" -out \"$SUB_ARCHIVE\""
+                SUB_CMD="$TAR_CMD | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:\"$PASSWORD\" -out \"$SUB_ARCHIVE\""
             else
                 SUB_CMD="$TAR_CMD > \"$SUB_ARCHIVE\""
             fi
