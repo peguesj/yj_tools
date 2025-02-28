@@ -1,6 +1,6 @@
 #!/bin/zsh
 # -----------------------------------------------------------------------------
-# BTAU (Back That App Up) - v1.3.1 (2025-02-28)
+# BTAU (Back That App Up) - v1.3.2 (2025-02-28)
 #
 # Authors:
 #   - Jeremiah Pegues <jeremiah@pegues.io> - https://pegues.io
@@ -39,7 +39,7 @@
 # Splash screen
 splash() {
   echo "=========================================="
-  echo " BTAU (Back That App Up) v1.3.1 (2025-02-28)"
+  echo " BTAU (Back That App Up) v1.3.2 (2025-02-28)"
   echo " Developed by:"
   echo "  - Jeremiah Pegues (jeremiah@pegues.io) - https://pegues.io"
   echo "  - OPSGAÃNG Sistemi (word@iite.bet) - https://iite.bet/ardela/schemas"
@@ -175,7 +175,7 @@ done
 
 # Ensure the output directory exists
 if [[ ! -d "$OUTPUT_DIR" ]]; then
-    echo "[INFO] Creating output directory: $OUTPUT_DIR"
+    log_msg "INFO" "Creating output directory: $OUTPUT_DIR"
     mkdir -p "$OUTPUT_DIR"
 fi
 
@@ -256,19 +256,19 @@ run_cmd() {
 
 log_msg "INFO" "Starting BTAU with parameters: NO_ENV=$NO_ENV, ZIP_BY_MODE=$ZIP_BY_MODE, NO_PASS=$NO_PASS, COMP_LEVEL=$COMP_LEVEL, FORMAT=$FORMAT, ARCHIVE_NAME_PARAM=$ARCHIVE_NAME_PARAM, OUTPUT_DIR=$OUTPUT_DIR, LOG_LEVEL=$LOG_LEVEL, PROMPT=$PROMPT, NO_WARN=$NO_WARN, DRY_RUN=$DRY_RUN"
 
-# Build exclusion patterns
+# Build exclusion patterns for tar (EXCLUDES) and for find (FIND_EXCLUDES)
 EXCLUDES=()
+FIND_EXCLUDES=()
 if [ "$NO_ENV" = false ]; then
     EXCLUDES+=("--exclude=.env")
+    FIND_EXCLUDES+=(".env")
 fi
 
 # General exclusions
-EXCLUDES+=("--exclude=.git")
-EXCLUDES+=("--exclude=node_modules")
-EXCLUDES+=("--exclude=venv")
-EXCLUDES+=("--exclude=__pycache__")
-EXCLUDES+=("--exclude=.cache")
-EXCLUDES+=("--exclude=*/.*")
+for item in .git node_modules venv __pycache__ .cache; do
+    EXCLUDES+=("--exclude=$item")
+    FIND_EXCLUDES+=("$item")
+done
 
 # Exclusions from .gitignore
 if [ -f .gitignore ]; then
@@ -276,39 +276,36 @@ if [ -f .gitignore ]; then
         [[ "$line" =~ ^#.*$ ]] && continue
         [[ -z "$line" ]] && continue
         EXCLUDES+=("--exclude=$line")
+        FIND_EXCLUDES+=("$line")
     done < .gitignore
 fi
 
 # Additional exclusions for Ruby, Elixir, PowerShell, etc.
-EXCLUDES+=("--exclude=vendor")
-EXCLUDES+=("--exclude=log")
-EXCLUDES+=("--exclude=tmp")
-EXCLUDES+=("--exclude=.bundle")
-EXCLUDES+=("--exclude=Gemfile.lock")
-EXCLUDES+=("--exclude=deps")
-EXCLUDES+=("--exclude=_build")
-EXCLUDES+=("--exclude=packages")
-EXCLUDES+=("--exclude=obj")
-EXCLUDES+=("--exclude=bin")
-EXCLUDES+=("--exclude=target")
-EXCLUDES+=("--exclude=build")
-EXCLUDES+=("--exclude=out")
-# macOS system files
-EXCLUDES+=("--exclude=.DS_Store")
-EXCLUDES+=("--exclude=.AppleDouble")
-EXCLUDES+=("--exclude=.LSOverride")
-# Windows system files
-EXCLUDES+=("--exclude=Thumbs.db")
-EXCLUDES+=("--exclude=desktop.ini")
-
-# Create a temporary file list using find
-FILELIST=$(mktemp)
-FIND_CMD="find . -type f"
-for pattern in "${EXCLUDES[@]}"; do
-    FIND_CMD+=" -not -path \"./$pattern\""
+for item in vendor log tmp .bundle Gemfile.lock deps _build packages obj bin target build out; do
+    EXCLUDES+=("--exclude=$item")
+    FIND_EXCLUDES+=("$item")
 done
-eval "$FIND_CMD" > "$FILELIST"
-log_msg "INFO" "File list created using command: $FIND_CMD"
+
+# macOS system files
+for item in .DS_Store .AppleDouble .LSOverride; do
+    EXCLUDES+=("--exclude=$item")
+    FIND_EXCLUDES+=("$item")
+done
+
+# Windows system files
+for item in Thumbs.db desktop.ini; do
+    EXCLUDES+=("--exclude=$item")
+    FIND_EXCLUDES+=("$item")
+done
+
+# Create a temporary file list using find with an array to avoid glob expansion issues
+FILELIST=$(mktemp)
+FIND_ARGS=(. -type f)
+for pat in "${FIND_EXCLUDES[@]}"; do
+    FIND_ARGS+=(-not -path "./$pat")
+done
+find "${FIND_ARGS[@]}" > "$FILELIST"
+log_msg "INFO" "File list created using find with arguments: ${FIND_ARGS[*]}"
 
 # If encryption is enabled, prompt for password
 if [ "$NO_PASS" = false ]; then
@@ -426,7 +423,7 @@ elif [[ "$ZIP_BY_MODE" == "sub" ]]; then
             7zip) SUB_ARCHIVE="${OUTPUT_DIR}/${SUB_ARCHIVE_BASE}.7z" ;;
         esac
         TEMP_FILELIST=$(mktemp)
-        find "$subdir" -type f $(for pattern in "${EXCLUDES[@]}"; do echo -n " -not -path \"$subdir/$pattern\""; done) > "$TEMP_FILELIST"
+        find "$subdir" -type f $(for pattern in "${FIND_EXCLUDES[@]}"; do echo -n " -not -path \"./$pattern\""; done) > "$TEMP_FILELIST"
         if [[ "$FORMAT" == "targz" || "$FORMAT" == "gz" ]]; then
             TAR_CMD="tar -czf - ${EXCLUDES[@]} -T \"$TEMP_FILELIST\""
             if [ "$NO_PASS" = false ]; then
