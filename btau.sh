@@ -1,6 +1,6 @@
 #!/bin/zsh
 # -----------------------------------------------------------------------------
-# BTAU (Back That App Up) - v1.3.2 (2025-02-28)
+# BTAU (Back That App Up) - v1.3.3 (2025-02-28)
 #
 # Authors:
 #   - Jeremiah Pegues <jeremiah@pegues.io> - https://pegues.io
@@ -12,8 +12,8 @@
 #   directories (e.g. node_modules, venv, vendor, deps, etc.), and OS system files.
 #
 #   Supports optional encryption (AES-256-CBC via OpenSSL with PBKDF2), adjustable compression,
-#   multiple archive formats (targz, gz, zip, 7zip), splitting options, verbose logging,
-#   interactive prompting, dry-run mode, and output directory specification.
+#   multiple archive formats (targz, gz, zip, 7zip), splitting options, interactive prompting,
+#   dry-run mode, output directory specification, and progress spinner animation.
 #
 #   Command-line options include:
 #     --no-env     : Exclude .env files (default; include if not specified)
@@ -39,7 +39,7 @@
 # Splash screen
 splash() {
   echo "=========================================="
-  echo " BTAU (Back That App Up) v1.3.2 (2025-02-28)"
+  echo " BTAU (Back That App Up) v1.3.3 (2025-02-28)"
   echo " Developed by:"
   echo "  - Jeremiah Pegues (jeremiah@pegues.io) - https://pegues.io"
   echo "  - OPSGAÃNG Sistemi (word@iite.bet) - https://iite.bet/ardela/schemas"
@@ -47,11 +47,16 @@ splash() {
 }
 splash
 
+# ANSI color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 # Set strict error handling
 set -euo pipefail
-
-# Trap errors and print a message before exiting
-trap 'echo "[ERROR] An unexpected error occurred on line ${LINENO}. Exiting."; exit 1' ERR
+trap 'echo -e "${RED}[ERROR] An unexpected error occurred on line ${LINENO}. Exiting.${NC}"; exit 1' ERR
 
 # Default parameters:
 NO_ENV=false
@@ -74,108 +79,56 @@ while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         --no-env)
-            NO_ENV=true
-            shift
-            ;;
+            NO_ENV=true; shift ;;
         --zip-by)
             shift
             if [[ "$1" == "split" ]]; then
-                ZIP_BY_MODE="split"
-                shift
+                ZIP_BY_MODE="split"; shift
                 if [[ "$1" == "--max" ]]; then
-                    shift
-                    SPLIT_MAX="$1"
-                    shift
+                    shift; SPLIT_MAX="$1"; shift
                 else
-                    SPLIT_COUNT="$1"
-                    shift
+                    SPLIT_COUNT="$1"; shift
                 fi
             elif [[ "$1" == "sub" ]]; then
-                ZIP_BY_MODE="sub"
-                shift
-                SUB_LEVEL="$1"
-                shift
+                ZIP_BY_MODE="sub"; shift; SUB_LEVEL="$1"; shift
             else
-                echo "Invalid --zip-by option"
-                exit 1
-            fi
-            ;;
+                echo -e "${RED}Invalid --zip-by option${NC}"; exit 1
+            fi ;;
         --no-pass)
-            NO_PASS=true
-            shift
-            ;;
+            NO_PASS=true; shift ;;
         --comp)
-            shift
-            case "$1" in
-                none|min|normal|maximum)
-                    COMP_LEVEL="$1"
-                    shift
-                    ;;
-                *)
-                    echo "Invalid compression level. Choose: none, min, normal, maximum."
-                    exit 1
-                    ;;
-            esac
-            ;;
+            shift; case "$1" in
+                none|min|normal|maximum) COMP_LEVEL="$1"; shift ;;
+                *) echo -e "${RED}Invalid compression level. Choose: none, min, normal, maximum.${NC}"; exit 1 ;;
+            esac ;;
         --format)
-            shift
-            case "$1" in
-                targz|gz|zip|7zip)
-                    FORMAT="$1"
-                    shift
-                    ;;
-                *)
-                    echo "Invalid format. Choose: targz, gz, zip, 7zip."
-                    exit 1
-                    ;;
-            esac
-            ;;
+            shift; case "$1" in
+                targz|gz|zip|7zip) FORMAT="$1"; shift ;;
+                *) echo -e "${RED}Invalid format. Choose: targz, gz, zip, 7zip.${NC}"; exit 1 ;;
+            esac ;;
         --log-level)
-            shift
-            case "$1" in
-                INFO|WARN|ERROR)
-                    LOG_LEVEL="$1"
-                    export YJ_CONFIG_LOGLEVEL="$LOG_LEVEL"
-                    shift
-                    ;;
-                *)
-                    echo "Invalid log level. Choose: INFO, WARN, ERROR."
-                    exit 1
-                    ;;
-            esac
-            ;;
+            shift; case "$1" in
+                INFO|WARN|ERROR) LOG_LEVEL="$1"; export YJ_CONFIG_LOGLEVEL="$LOG_LEVEL"; shift ;;
+                *) echo -e "${RED}Invalid log level. Choose: INFO, WARN, ERROR.${NC}"; exit 1 ;;
+            esac ;;
         --name)
-            shift
-            ARCHIVE_NAME_PARAM="$1"
-            shift
-            ;;
+            shift; ARCHIVE_NAME_PARAM="$1"; shift ;;
         --output-dir)
-            shift
-            OUTPUT_DIR="$1"
-            shift
-            ;;
+            shift; OUTPUT_DIR="$1"; shift ;;
         --prompt)
-            PROMPT=true
-            shift
-            ;;
+            PROMPT=true; shift ;;
         --no-warn)
-            NO_WARN=true
-            shift
-            ;;
+            NO_WARN=true; shift ;;
         --dry-run)
-            DRY_RUN=true
-            shift
-            ;;
+            DRY_RUN=true; shift ;;
         *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
+            echo -e "${RED}Unknown option: $1${NC}"; exit 1 ;;
     esac
 done
 
 # Ensure the output directory exists
 if [[ ! -d "$OUTPUT_DIR" ]]; then
-    log_msg "INFO" "Creating output directory: $OUTPUT_DIR"
+    echo -e "${YELLOW}[INFO] Creating output directory: $OUTPUT_DIR${NC}"
     mkdir -p "$OUTPUT_DIR"
 fi
 
@@ -183,74 +136,67 @@ fi
 if [ "$PROMPT" = true ]; then
     read -q "answer?Exclude .env files? (y/n, default y): "
     echo
-    if [[ "$answer" =~ ^[Nn] ]]; then
-        NO_ENV=false
-    else
-        NO_ENV=true
-    fi
-
+    if [[ "$answer" =~ ^[Nn] ]]; then NO_ENV=false; else NO_ENV=true; fi
     read "fmt?Archive format (targz, gz, zip, 7zip) [default targz]: "
-    if [ -n "$fmt" ]; then
-        FORMAT="$fmt"
-    fi
-
+    if [ -n "$fmt" ]; then FORMAT="$fmt"; fi
     read "comp?Compression level (none, min, normal, maximum) [default normal]: "
-    if [ -n "$comp" ]; then
-        COMP_LEVEL="$comp"
-    fi
-
+    if [ -n "$comp" ]; then COMP_LEVEL="$comp"; fi
     read -q "enc?Use encryption? (y/n, default y): "
     echo
-    if [[ "$enc" =~ ^[Nn] ]]; then
-        NO_PASS=true
-    else
-        NO_PASS=false
-    fi
-
+    if [[ "$enc" =~ ^[Nn] ]]; then NO_PASS=true; else NO_PASS=false; fi
     read "lvl?Log level (INFO, WARN, ERROR) [default WARN]: "
-    if [ -n "$lvl" ]; then
-        LOG_LEVEL="$lvl"
-        export YJ_CONFIG_LOGLEVEL="$LOG_LEVEL"
-    fi
-
+    if [ -n "$lvl" ]; then LOG_LEVEL="$lvl"; export YJ_CONFIG_LOGLEVEL="$LOG_LEVEL"; fi
     read "name?Archive name parameter (default, dir, or custom<string>) [default default]: "
-    if [ -n "$name" ]; then
-        ARCHIVE_NAME_PARAM="$name"
-    fi
-
+    if [ -n "$name" ]; then ARCHIVE_NAME_PARAM="$name"; fi
     read "out?Output directory [default current directory]: "
-    if [ -n "$out" ]; then
-        OUTPUT_DIR="$out"
-        if [[ ! -d "$OUTPUT_DIR" ]]; then
-            mkdir -p "$OUTPUT_DIR"
-        fi
-    fi
+    if [ -n "$out" ]; then OUTPUT_DIR="$out"; [[ ! -d "$OUTPUT_DIR" ]] && mkdir -p "$OUTPUT_DIR"; fi
 fi
 
-# Setup logging function (syslog style)
+# Setup logging function with colors
 log_msg() {
     local level="$1"
     local msg="$2"
     typeset -A LEVELS
     LEVELS=( INFO 1 WARN 2 ERROR 3 )
-    if [ "${LEVELS[$level]}" -lt "${LEVELS[$LOG_LEVEL]}" ]; then
-        return
-    fi
+    if [ "${LEVELS[$level]}" -lt "${LEVELS[$LOG_LEVEL]}" ]; then return; fi
+    case $level in
+      INFO) local color="${BLUE}" ;;
+      WARN) local color="${YELLOW}" ;;
+      ERROR) local color="${RED}" ;;
+      *) local color="${NC}" ;;
+    esac
     logger -t BTAU "[$level] $msg"
-    echo "[$level] $msg"
+    echo -e "${color}[$level]${NC} $msg"
 }
 
-if [ "$NO_WARN" = true ]; then
-    exec 2>/dev/null
-fi
+if [ "$NO_WARN" = true ]; then exec 2>/dev/null; fi
 
-# Function to run commands; in dry-run mode, just echo them.
+# Spinner function
+spinner() {
+    local pid=$1
+    local delay=0.1
+    local spinstr='|/-\'
+    while kill -0 $pid 2>/dev/null; do
+        local temp=${spinstr#?}
+        printf " [%c]  " "$spinstr"
+        spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
+
+# Enhanced run_cmd to use spinner
 run_cmd() {
     if [ "$DRY_RUN" = true ]; then
         log_msg "INFO" "DRY-RUN: $*"
     else
         log_msg "INFO" "Running: $*"
-        eval "$*"
+        # Run command in background
+        eval "$*" &
+        cmd_pid=$!
+        spinner $cmd_pid
+        wait $cmd_pid
     fi
 }
 
@@ -264,13 +210,11 @@ if [ "$NO_ENV" = false ]; then
     FIND_EXCLUDES+=(".env")
 fi
 
-# General exclusions
 for item in .git node_modules venv __pycache__ .cache; do
     EXCLUDES+=("--exclude=$item")
     FIND_EXCLUDES+=("$item")
 done
 
-# Exclusions from .gitignore
 if [ -f .gitignore ]; then
     while IFS= read -r line; do
         [[ "$line" =~ ^#.*$ ]] && continue
@@ -280,25 +224,22 @@ if [ -f .gitignore ]; then
     done < .gitignore
 fi
 
-# Additional exclusions for Ruby, Elixir, PowerShell, etc.
 for item in vendor log tmp .bundle Gemfile.lock deps _build packages obj bin target build out; do
     EXCLUDES+=("--exclude=$item")
     FIND_EXCLUDES+=("$item")
 done
 
-# macOS system files
 for item in .DS_Store .AppleDouble .LSOverride; do
     EXCLUDES+=("--exclude=$item")
     FIND_EXCLUDES+=("$item")
 done
 
-# Windows system files
 for item in Thumbs.db desktop.ini; do
     EXCLUDES+=("--exclude=$item")
     FIND_EXCLUDES+=("$item")
 done
 
-# Create a temporary file list using find with an array to avoid glob expansion issues
+# Create a temporary file list using find with an array (avoiding glob expansion issues)
 FILELIST=$(mktemp)
 FIND_ARGS=(. -type f)
 for pat in "${FIND_EXCLUDES[@]}"; do
@@ -321,7 +262,6 @@ else
     log_msg "WARN" "Encryption disabled (--no-pass enabled)"
 fi
 
-# Map compression level to options for gzip/zip/7zip
 case "$COMP_LEVEL" in
     none) GZIP_OPT="-0" ;;
     min) GZIP_OPT="-1" ;;
@@ -330,7 +270,6 @@ case "$COMP_LEVEL" in
 esac
 log_msg "INFO" "Compression level: $COMP_LEVEL ($GZIP_OPT)"
 
-# Determine OS for file size commands (macOS vs Linux)
 OS_TYPE=$(uname)
 if [[ "$OS_TYPE" == "Darwin" ]]; then
     STAT_CMD="stat -f%z"
@@ -349,7 +288,6 @@ else
     ARCHIVE_PREFIX="${ARCHIVE_NAME_PARAM}_"
 fi
 
-# Generate archive name with timestamp and output directory prefix
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
 ARCHIVE_BASE="${ARCHIVE_PREFIX}${TIMESTAMP}"
 ARCHIVE_NAME=""
@@ -361,7 +299,6 @@ esac
 
 log_msg "INFO" "Archive will be named: $ARCHIVE_NAME"
 
-# Function to create the archive
 create_archive() {
     if [[ "$FORMAT" == "targz" || "$FORMAT" == "gz" ]]; then
         TAR_CMD="tar -czf - ${EXCLUDES[@]} -T \"$FILELIST\""
@@ -401,7 +338,6 @@ create_archive() {
 
 create_archive
 
-# Handle splitting if --zip-by was specified
 if [[ "$ZIP_BY_MODE" == "split" ]]; then
     if [ -n "$SPLIT_MAX" ]; then
         log_msg "INFO" "Splitting archive into chunks with maximum size: $SPLIT_MAX"
