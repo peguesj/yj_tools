@@ -1,5 +1,4 @@
 #!/bin/zsh
-# filepath: /Users/jeremiah/tools/@yj/btau.sh
 # -----------------------------------------------------------------------------
 # BTAU (Back That App Up) - v1.3.3 (2025-02-28)
 #
@@ -31,33 +30,9 @@
 #     --dry-run    : Show commands without executing them
 #
 # Usage Examples:
-#   ./btau.sh                                                                                                        # Basic usage with default settings.
-#   ./btau.sh --no-env                                                                                               # Exclude .env files from the archive.
-#   ./btau.sh --zip-by split 3                                                                                       # Split the archive into 3 parts.
-#   ./btau.sh --zip-by split --max 2GB                                                                                # Split the archive into parts with a maximum size of 2GB each.
-#   ./btau.sh --zip-by sub 1                                                                                         # Create separate archives for each subdirectory at level 1.
-#   ./btau.sh --no-pass                                                                                              # Disable encryption (skip password prompt).
-#   ./btau.sh --comp none                                                                                             # Set compression level to none.
-#   ./btau.sh --comp min                                                                                              # Set compression level to minimum.
-#   ./btau.sh --comp normal                                                                                           # Set compression level to normal.
-#   ./btau.sh --comp maximum                                                                                           # Set compression level to maximum.
-#   ./btau.sh --format targz                                                                                           # Set archive format to targz.
-#   ./btau.sh --format gz                                                                                             # Set archive format to gz.
-#   ./btau.sh --format zip                                                                                            # Set archive format to zip.
-#   ./btau.sh --format 7zip                                                                                           # Set archive format to 7zip.
-#   ./btau.sh --log-level INFO                                                                                         # Set log level to INFO.
-#   ./btau.sh --log-level WARN                                                                                         # Set log level to WARN.
-#   ./btau.sh --log-level ERROR                                                                                         # Set log level to ERROR.
-#   ./btau.sh --name default                                                                                           # Use the default archive naming scheme.
-#   ./btau.sh --name dir                                                                                              # Name the archive based on the current directory name.
-#   ./btau.sh --name customMyBackup                                                                                   # Use a custom name for the archive (MyBackup).
-#   ./btau.sh --output-dir /path/to/backup                                                                            # Specify the output directory for the archive.
-#   ./btau.sh --prompt                                                                                                # Enable interactive prompting for parameters.
-#   ./btau.sh --no-warn                                                                                               # Suppress warning messages.
-#   ./btau.sh --dry-run                                                                                                # Perform a dry run, showing commands without executing them.
-#   ./btau.sh --no-env --zip-by split --max 2GB --comp maximum --format 7zip --log-level INFO --name customMyBackup --output-dir /path/to/backup  # Comprehensive example with multiple options.
-#   ./btau.sh --zip-by sub 1 --prompt --dry-run                                                                       # Use subdirectory splitting with interactive prompting and dry run.
-#   ./btau.sh --no-pass --name dir                                                                                     # Archive entire project recursively excluding hidden files calling the archive the same name as the `pwd` appended with a hyphen and isodatetime
+#   ./BTAU.sh --zip-by split 3
+#   ./BTAU.sh --no-env --zip-by split --max 2GB --comp maximum --format 7zip --log-level INFO --name customMyBackup --output-dir /path/to/backup
+#   ./BTAU.sh --zip-by sub 1 --prompt --dry-run
 #
 # -----------------------------------------------------------------------------
 
@@ -340,9 +315,9 @@ create_archive() {
             maximum) ZIP_LEVEL="-9" ;;
         esac
         if [ "$NO_PASS" = false ]; then
-            CMD="zip -r $ZIP_LEVEL $(printf -- '-x %s ' "${EXCLUDES[@]}") -e \"$ARCHIVE_NAME\" ."
+            CMD="zip -r $ZIP_LEVEL -e \"$ARCHIVE_NAME\" ."
         else
-            CMD="zip -r $ZIP_LEVEL $(printf -- '-x %s ' "${EXCLUDES[@]}") \"$ARCHIVE_NAME\" ."
+            CMD="zip -r $ZIP_LEVEL \"$ARCHIVE_NAME\" ."
         fi
     elif [[ "$FORMAT" == "7zip" ]]; then
         case "$COMP_LEVEL" in
@@ -352,9 +327,9 @@ create_archive() {
             maximum) SEVEN_LEVEL="-mx=9" ;;
         esac
         if [ "$NO_PASS" = false ]; then
-            CMD="7z a $SEVEN_LEVEL -x@\"$FILELIST\" -p\"$PASSWORD\" \"$ARCHIVE_NAME\""
+            CMD="7z a $SEVEN_LEVEL -p\"$PASSWORD\" \"$ARCHIVE_NAME\" @\"$FILELIST\""
         else
-            CMD="7z a $SEVEN_LEVEL -x@\"$FILELIST\" \"$ARCHIVE_NAME\""
+            CMD="7z a $SEVEN_LEVEL \"$ARCHIVE_NAME\" @\"$FILELIST\""
         fi
     fi
     log_msg "INFO" "Archive command: $CMD"
