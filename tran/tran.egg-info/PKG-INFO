@@ -1,0 +1,19 @@
+Metadata-Version: 2.4
+Name: tran
+Version: 1.0.0
+Summary: TranscriptAnalysis - Advanced transcript analysis and TUI
+Author: Jeremiah Pegues
+Author-email: jeremiah@pegues.io
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Requires-Dist: openai
+Requires-Dist: textblob
+Requires-Dist: python-dotenv
+Requires-Dist: rich
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

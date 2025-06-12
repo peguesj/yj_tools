@@ -38,9 +38,11 @@ class PostInstallCommand(install):
                         print(f"[COPY] {src} -> {dst} (symlink failed: {e})")
 
 setup(
-    name='tran',
+    name='yj-tran',
     version='1.0.0',
     description='TranscriptAnalysis - Advanced transcript analysis and TUI',
+    long_description=open('README.md').read() if os.path.exists('README.md') else '',
+    long_description_content_type='text/markdown',
     author='Jeremiah Pegues',
     author_email='jeremiah@pegues.io',
     packages=find_packages(include=['tran', 'tran.*']),
