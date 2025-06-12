@@ -1,0 +1,3 @@
+[console_scripts]
+yj_tran_parse = tran:parse
+yj_tran_tui = tran:tui

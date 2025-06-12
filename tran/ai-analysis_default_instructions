@@ -1,0 +1,11 @@
+# ai-analysis_default_instructions
+# Best-practice: This file provides default instructions for AI analysis.
+# It is included in the package for reproducibility and extensibility.
+# You may edit this file to customize the default system prompt for transcript analysis.
+
+Analyze the transcript and extract:
+- Topics discussed
+- Speaker insights
+- Sentiment analysis
+- Diarization and speaking patterns
+Return all results as a single JSON object with keys: topics_discussed, speaker_insights, sentiment_analysis, diarization.
