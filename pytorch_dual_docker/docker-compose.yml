@@ -1,0 +1,14 @@
+version: '3.9'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+      platform: linux/arm64
+    volumes:
+      - .:/app
+    environment:
+      - ENV=development
+    ports:
+      - "8000:8000"
+    command: python main.py
