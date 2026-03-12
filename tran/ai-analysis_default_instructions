@@ -1,0 +1,11 @@
+# ai-analysis_default_instructions
+# Best-practice: This file provides default instructions for AI analysis.
+# It is included in the package for reproducibility and extensibility.
+# You may edit this file to customize the default system prompt for transcript analysis.
+
+- Topics discussed
+- Key decisions
+- Action items
+- Sentiment
+- Speaker insights
+- Diarization

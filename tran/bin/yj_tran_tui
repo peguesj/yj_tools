@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+"""
+yj_tran_tui - CLI entrypoint for TranscriptAnalysis TUI
+Author: Jeremiah Pegues <jeremiah@pegues.io>
+"""
+from tran import tui
+
+tui()

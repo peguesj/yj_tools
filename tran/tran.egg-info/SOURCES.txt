@@ -1,0 +1,8 @@
+README.md
+setup.py
+tran.egg-info/PKG-INFO
+tran.egg-info/SOURCES.txt
+tran.egg-info/dependency_links.txt
+tran.egg-info/entry_points.txt
+tran.egg-info/requires.txt
+tran.egg-info/top_level.txt
