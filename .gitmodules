@@ -1,0 +1,3 @@
+[submodule "lfg"]
+	path = lfg
+	url = https://github.com/peguesj/lfg.git
