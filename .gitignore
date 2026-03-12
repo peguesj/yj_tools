@@ -1,3 +1,36 @@
+# Claude Code agent directories
+.claude/
+**/.claude/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+**/*.egg-info/
+
+# LFG build artifacts
+lfg/LFG.app/
+lfg/LFG\ Helper.app/
+lfg/lfg-menubar
+lfg/viewer
+
+# LFG generated HTML cache
+lfg/.lfg_*.html
+lfg/.lfg-cache/
+**/.lfg-cache/
+
+# Archives and temp
+*.tar.gz
 *.zip
 *.gz
-.DS_Store
+free_docker
+
+# tran packaging artifacts
+tran/tran.egg-info/
+tran/yj_tran.egg-info/
+tran/tran/
